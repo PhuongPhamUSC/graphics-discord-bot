@@ -16,7 +16,10 @@ year_pattern = re.compile(r'\b(?:{}|{})\b'.format(current_year, '|'.join(map(str
 urls = ["https://news.mit.edu/topic/computer-graphics", 
         "https://www.sciencedaily.com/news/computers_math/computer_graphics/", 
         "https://www.cgrecord.net/", 
-        "https://www.cgw.com/Press-Center.aspx"]
+        "https://www.cgw.com/Press-Center.aspx",
+        "https://phys.org/tags/computer+graphics/",
+        "https://spectrum.ieee.org/magazine/",
+        "https://jcgt.org/"]
 HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
 
 # Scraping with beautiful soup
@@ -24,6 +27,7 @@ with open('links.txt', 'w') as file:
     for url in urls:
         response = requests.get(url, headers=HEADERS)
         file.write(f"URL: {url}\n")
+        print(response.status_code)
 
         # Check if the request was successful (status code 200)
         if response.status_code == 200:
