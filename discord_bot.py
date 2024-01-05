@@ -5,8 +5,7 @@ import re
 import asyncio
 from datetime import datetime
 import discord
-from discord.ext import commands
-from discord.ext import tasks
+from discord.ext import commands, tasks
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from fake_useragent import UserAgent
@@ -100,7 +99,7 @@ class MyClient(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # any attribute we can access from our task
-        self.channel_id = -1
+        self.channel_id = [1192747299974156350, 1192745692880453705]
 
     async def setup_hook(self) -> None:
         # start the task to run in the background
@@ -112,21 +111,15 @@ class MyClient(discord.Client):
     
     async def on_guild_join(self, guild):
         print("Joining guild: " + guild.name)
-        print("Current channel id: " + str(self.channel_id))
 
     @tasks.loop(seconds=600000)  # task runs every x seconds
     async def my_background_task(self):
-        if self.channel_id == -1: # If don't know which channel to send to
-            for c in self.get_all_channels():
-                if c.name == "news":
-                    self.channel_id = c.id
-                    break
-                
-        channel = self.get_channel(self.channel_id) # test channel ID
-        links_list = await get_news()
-        if len(links_list) > 0:
-            links_string = '\n'.join(links_list)
-            await channel.send(links_string)
+        for c_id in self.channel_id:
+            channel = self.get_channel(c_id) # test channel ID
+            links_list = await get_news()
+            if len(links_list) > 0:
+                links_string = '\n'.join(links_list)
+                await channel.send(links_string)
 
     @my_background_task.before_loop
     async def before_my_task(self):
