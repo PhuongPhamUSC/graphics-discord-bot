@@ -1,11 +1,12 @@
+import functools
+import typing
+import os
+import re
+import asyncio
+from datetime import datetime
 import discord
 from discord.ext import commands
 from discord.ext import tasks
-import os
-import re
-import codecs
-import requests
-from datetime import datetime
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from fake_useragent import UserAgent
@@ -22,6 +23,13 @@ url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_KEY")
 supabase = create_client(url, key)
 
+def to_thread(func: typing.Callable) -> typing.Coroutine:
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+    return wrapper
+
+@to_thread
 def get_news():
     response = supabase.table('NEWS_SOURCES').select("*").execute()
     
@@ -91,9 +99,8 @@ def get_news():
 class MyClient(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # an attribute we can access from our task
-        self.news_links = []
+        # any attribute we can access from our task
+        self.channel_id = -1
 
     async def setup_hook(self) -> None:
         # start the task to run in the background
@@ -102,15 +109,23 @@ class MyClient(discord.Client):
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print('------')
+    
+    async def on_guild_join(self, guild):
+        print("Joining guild: " + guild.name)
+        print("Current channel id: " + str(self.channel_id))
 
     @tasks.loop(seconds=600000)  # task runs every x seconds
     async def my_background_task(self):
-        channel = self.get_channel(1192747299974156350) # test channel ID
-        links_list = get_news()
-        if links_list.count > 0:
-            # Concatenate all links into a single string
+        if self.channel_id == -1: # If don't know which channel to send to
+            for c in self.get_all_channels():
+                if c.name == "news":
+                    self.channel_id = c.id
+                    break
+                
+        channel = self.get_channel(self.channel_id) # test channel ID
+        links_list = await get_news()
+        if len(links_list) > 0:
             links_string = '\n'.join(links_list)
-            # Send the concatenated string as a message
             await channel.send(links_string)
 
     @my_background_task.before_loop
