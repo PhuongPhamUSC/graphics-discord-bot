@@ -1,3 +1,6 @@
+import discord
+from discord.ext import commands
+from discord.ext import tasks
 import os
 import re
 import codecs
@@ -12,17 +15,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from supabase import create_client
 
+token = os.environ.get("DISCORD_TOKEN")
+channel_id = os.environ.get("DISCORD_CHANNEL_ID")
+wait_time = os.environ.get("WAIT_TIME")
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_KEY")
+supabase = create_client(url, key)
+
 def get_news():
-    # Set up Supabase
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
-    supabase = create_client(url, key)
-
     response = supabase.table('NEWS_SOURCES').select("*").execute()
-
-    # Set up the user agent
-    ua = UserAgent()
-    user_agent = ua.random
     
     # Set up the browser
     woptions = webdriver.ChromeOptions()
@@ -63,30 +64,58 @@ def get_news():
 
         # Get the page source after dynamic content has loaded
         content = driver.page_source
-        # file.write(f"{page["name"]}: {url}\n")
 
         # For example, let's extract all the links on the page using BeautifulSoup
         soup = BeautifulSoup(content, 'html.parser')
-        # cap links at top 10
         links = soup.find_all('a')
         
-        # Take top 10 links in this site
+        # Take top x valid links in this site
         link_count = 0
         for link in links:
             href = link.get('href')
-            if href:
-                match = year_pattern.search(href) or publication_pattern.search(href)
+            if href and (href not in total_links) and (page["base_url"] + href not in total_links):
+                match = (year_pattern.search(href) or publication_pattern.search(href))
                 if match:
                     link_count += 1
                     if page["base_url"] in href: # Check if the link contains base url
                         total_links.append(href)
                     else:
                         total_links.append(page["base_url"] + href)
-            if link_count == 5:    
+            if link_count == 2:    
                 break
     driver.quit()
     print("Done scraping with BeautifulSoup " + str(len(total_links)) + " links found")
     return total_links
 
-# Run the function
-get_news()
+
+class MyClient(discord.Client):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # an attribute we can access from our task
+        self.news_links = []
+
+    async def setup_hook(self) -> None:
+        # start the task to run in the background
+        self.my_background_task.start()
+
+    async def on_ready(self):
+        print(f'Logged in as {self.user} (ID: {self.user.id})')
+        print('------')
+
+    @tasks.loop(seconds=600000)  # task runs every x seconds
+    async def my_background_task(self):
+        channel = self.get_channel(1192747299974156350) # test channel ID
+        links_list = get_news()
+        if links_list.count > 0:
+            # Concatenate all links into a single string
+            links_string = '\n'.join(links_list)
+            # Send the concatenated string as a message
+            await channel.send(links_string)
+
+    @my_background_task.before_loop
+    async def before_my_task(self):
+        await self.wait_until_ready()  # wait until the bot logs in
+
+client = MyClient(intents=discord.Intents.default())
+client.run(token)
