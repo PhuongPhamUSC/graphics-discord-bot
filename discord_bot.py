@@ -31,7 +31,6 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
 @to_thread
 def get_news():
     response = supabase.table('NEWS_SOURCES').select("*").execute()
-    
     # Set up the browser
     woptions = webdriver.ChromeOptions()
     woptions.add_argument("--headless")
@@ -99,11 +98,12 @@ class MyClient(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # any attribute we can access from our task
-        self.channel_id = [1192747299974156350, 1192745692880453705]
+        self.channel_id = {1192747299974156350, 1192745692880453705} # test channel ID
 
     async def setup_hook(self) -> None:
         # start the task to run in the background
         self.my_background_task.start()
+        pass
 
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -111,7 +111,25 @@ class MyClient(discord.Client):
     
     async def on_guild_join(self, guild):
         print("Joining guild: " + guild.name)
+        
+    async def on_message(self, message):
+        # we do not want the bot to reply to itself
+        if message.author.id == self.user.id:
+            return
 
+        if message.content.startswith('!hello'):
+            await message.reply('Hello!', mention_author=True)
+        
+        if message.content.startswith('!add channel'):
+            channel = message.channel
+            self.channel_id.add(channel.id)
+            await channel.send("Channel added")
+        
+        if message.content.startswith('!remove channel'):
+            channel = message.channel
+            self.channel_id.remove(channel.id)
+            await channel.send("Channel removed")
+            
     @tasks.loop(seconds=600000)  # task runs every x seconds
     async def my_background_task(self):
         for c_id in self.channel_id:
@@ -125,5 +143,7 @@ class MyClient(discord.Client):
     async def before_my_task(self):
         await self.wait_until_ready()  # wait until the bot logs in
 
-client = MyClient(intents=discord.Intents.default())
+intents=discord.Intents.default()
+intents.message_content = True
+client = MyClient(intents=intents)
 client.run(token)
