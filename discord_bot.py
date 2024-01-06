@@ -30,7 +30,6 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
 
 @to_thread
 def get_news():
-    response = supabase.table('NEWS_SOURCES').select("*").execute()
     # Set up the browser
     woptions = webdriver.ChromeOptions()
     woptions.add_argument("--headless")
@@ -53,7 +52,7 @@ def get_news():
 
     # Scraping with beautiful soup
     total_links = []
-    
+    response = supabase.table('NEWS_SOURCES').select("*").execute()
     for page in response.data:
         url = page["base_url"] + page["directory"]
         
@@ -100,11 +99,6 @@ class MyClient(discord.Client):
         # any attribute we can access from our task
         self.channel_id = {1192747299974156350, 1192745692880453705} # test channel ID
 
-    async def setup_hook(self) -> None:
-        # start the task to run in the background
-        self.my_background_task.start()
-        pass
-
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print('------')
@@ -120,20 +114,25 @@ class MyClient(discord.Client):
         if message.content.startswith('!hello'):
             await message.reply('Hello!', mention_author=True)
         
+        if message.content.startswith('!start news'):
+            self.my_background_task.start()
+            await message.reply('News started!', mention_author=True)
+        
         if message.content.startswith('!add channel'):
             channel = message.channel
-            self.channel_id.add(channel.id)
-            await channel.send("Channel added")
+            supabase.table('JOINED_CHANNELS').insert({"id":channel.id}).execute()
+            await channel.send("Channel subscribed")
         
         if message.content.startswith('!remove channel'):
             channel = message.channel
-            self.channel_id.remove(channel.id)
-            await channel.send("Channel removed")
+            supabase.table('JOINED_CHANNELS').delete().eq('id', channel.id).execute()
+            await channel.send("Channel unsubscribed")
             
     @tasks.loop(seconds=600000)  # task runs every x seconds
     async def my_background_task(self):
-        for c_id in self.channel_id:
-            channel = self.get_channel(c_id) # test channel ID
+        response = supabase.table('JOINED_CHANNELS').select("*").execute()
+        for chan in response.data:
+            channel = self.get_channel(chan["id"]) # test channel ID
             links_list = await get_news()
             if len(links_list) > 0:
                 links_string = '\n'.join(links_list)
