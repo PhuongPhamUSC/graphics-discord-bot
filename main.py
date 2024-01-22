@@ -19,6 +19,7 @@ token = os.environ.get("DISCORD_TOKEN")
 url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_KEY")
 supabase = create_client(url, key)
+news_source_list = []
 
 # Set up the browser
 woptions = webdriver.ChromeOptions()
@@ -34,7 +35,6 @@ woptions.add_argument("--allow-insecure-localhost")
 woptions.add_argument("--ignore-urlfetcher-cert-requests")
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=woptions)
 
-
 def to_thread(func: typing.Callable) -> typing.Coroutine:
 
   @functools.wraps(func)
@@ -46,6 +46,8 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
 
 @to_thread
 def get_news():
+  # empty news source list
+  news_source_list.clear()
 
   # Get the past 2 years
   current_year = datetime.now().year
@@ -84,24 +86,24 @@ def get_news():
 
     # Take top x valid links in this site
     link_count = 0
+    link_set = set()
     for link in links:
       href = link.get('href')
       if href and (href not in total_links) and (page["base_url"] + href
                                                  not in total_links):
         match = "topic" not in href and (year_pattern.search(href)
-                                         or publication_pattern.search(href)
-                                         or file_ext_pattern.search(href))
+                                         or publication_pattern.search(href))
         if match:
           link_count += 1
           if page["base_url"] in href:  # Check if the link contains base url
-            total_links.append(href)
+            link_set.add(href)
           else:
-            total_links.append(page["base_url"] + href)
-      if link_count == 2:
+            link_set.add(page["base_url"] + href)
+      if len(link_set) == 5:
+        news_source_list.append(page["name"])
+        total_links.append(link_set)
         break
   driver.quit()
-  print("Done scraping with BeautifulSoup " + str(len(total_links)) +
-        " links found")
   return total_links
 
 
@@ -126,8 +128,12 @@ class MyClient(discord.Client):
       await message.reply('Hello!', mention_author=True)
 
     if message.content.startswith('!start news'):
-      self.my_background_task.start()
-      await message.reply('News started!', mention_author=True)
+      # if task has not started
+      if not self.my_background_task.is_running():
+        self.my_background_task.start()
+        await message.reply('News started!', mention_author=True)
+      else:
+        await message.reply('News already started!', mention_author=True)
 
     if message.content.startswith('!add channel'):
       channel = message.channel
@@ -139,15 +145,17 @@ class MyClient(discord.Client):
       supabase.table('JOINED_CHANNELS').delete().eq('id', channel.id).execute()
       await channel.send("Channel unsubscribed")
 
-  @tasks.loop(seconds=600000)  # task runs every x seconds
+  @tasks.loop(seconds=300000)  # task runs every x seconds
   async def my_background_task(self):
     response = supabase.table('JOINED_CHANNELS').select("*").execute()
     for chan in response.data:
       channel = self.get_channel(chan["id"])  # test channel ID
       links_list = await get_news()
       if len(links_list) > 0:
-        links_string = '\n'.join(links_list)
-        await channel.send(links_string)
+        # for every 5 links, send in one message
+        for i in range(0, len(links_list)):
+          links_string = news_source_list[i] + '\n' + '\n'.join(links_list[i])
+          await channel.send(links_string)
 
   @my_background_task.before_loop
   async def before_my_task(self):
