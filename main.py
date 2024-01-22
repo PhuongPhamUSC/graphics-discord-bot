@@ -8,7 +8,6 @@ import discord
 from discord.ext import commands, tasks
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from fake_useragent import UserAgent
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -33,6 +32,7 @@ woptions.add_argument("--ignore-certificate-errors")
 woptions.add_argument("--ignore-ssl-errors")
 woptions.add_argument("--allow-insecure-localhost")
 woptions.add_argument("--ignore-urlfetcher-cert-requests")
+# Driver
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=woptions)
 
 def to_thread(func: typing.Callable) -> typing.Coroutine:
@@ -115,6 +115,8 @@ class MyClient(discord.Client):
   async def on_ready(self):
     print(f'Logged in as {self.user} (ID: {self.user.id})')
     print('------')
+    # start the background task
+    await self.my_background_task()
 
   async def on_guild_join(self, guild):
     print("Joining guild: " + guild.name)
@@ -145,7 +147,7 @@ class MyClient(discord.Client):
       supabase.table('JOINED_CHANNELS').delete().eq('id', channel.id).execute()
       await channel.send("Channel unsubscribed")
 
-  @tasks.loop(seconds=300000)  # task runs every x seconds
+  # @tasks.loop(seconds=300000)  # task runs every x seconds
   async def my_background_task(self):
     response = supabase.table('JOINED_CHANNELS').select("*").execute()
     for chan in response.data:
@@ -157,9 +159,9 @@ class MyClient(discord.Client):
           links_string = news_source_list[i] + '\n' + '\n'.join(links_list[i])
           await channel.send(links_string)
 
-  @my_background_task.before_loop
-  async def before_my_task(self):
-    await self.wait_until_ready()  # wait until the bot logs in
+  # @my_background_task.before_loop
+  # async def before_my_task(self):
+  #   await self.wait_until_ready()
 
 
 intents = discord.Intents.default()

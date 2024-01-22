@@ -1,0 +1,5 @@
+discord.py 
+beautifulsoup4 
+selenium 
+supabase 
+webdriver-manager
